@@ -13,6 +13,7 @@ use log::{debug, error, info, warn};
 use rayhunter::Device;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::time::sleep;
 
 use crate::gps::GpsRecord;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -470,12 +471,11 @@ pub fn run_diag_read_thread(
 ) {
     task_tracker.spawn(async move {
         info!("Using configuration for device: {0:?}", device);
-        let mut dev = DiagDevice::new(&device)
-            .await?;
-        dev.config_logs()
-            .await?;
-
-        let mut diag_stream = pin!(dev.as_stream().into_stream());
+        // Devices whose DIAG arrives over the diag_socket_log TCP bridge (e.g. the
+        // Mudi 7) can have the bridge drop the connection under load. For those we
+        // recover by rebuilding the device and resuming the same recording, rather
+        // than letting a read error kill capture until a manual restart.
+        let socket_transport = rayhunter::diag_device::uses_socket_diag(&device);
         let mut diag_task = DiagTask::new(
             ui_update_sender,
             analysis_sender,
@@ -486,62 +486,81 @@ pub fn run_diag_read_thread(
             gps_mode,
             gps_fixed_coords,
         );
+        // Start the recording once; it persists across bridge reconnects.
         qmdl_file_tx
             .send(DiagDeviceCtrlMessage::StartRecording { response_tx: None })
             .await
             .unwrap();
-        loop {
-            tokio::select! {
-                msg = qmdl_file_rx.recv() => {
-                    match msg {
-                        Some(DiagDeviceCtrlMessage::StartRecording { response_tx }) => {
-                            let mut qmdl_store = qmdl_store_lock.write().await;
-                            let result = diag_task.start(qmdl_store.deref_mut()).await;
-                            if let Some(tx) = response_tx {
-                                tx.send(result).ok();
-                            }
-                        },
-                        Some(DiagDeviceCtrlMessage::StopRecording) => {
-                            let mut qmdl_store = qmdl_store_lock.write().await;
-                            diag_task.stop(qmdl_store.deref_mut(), None).await;
-                        },
-                        // None means all the Senders have been dropped, so it's
-                        // time to go
-                        Some(DiagDeviceCtrlMessage::Exit) | None => {
-                            info!("Diag reader thread exiting...");
-                            let mut qmdl_store = qmdl_store_lock.write().await;
-                            diag_task.stop_current_recording(qmdl_store.deref_mut()).await;
-                            return Ok(())
-                        },
-                        Some(DiagDeviceCtrlMessage::DeleteEntry { name, response_tx }) => {
-                            let mut qmdl_store = qmdl_store_lock.write().await;
-                            let resp = diag_task.delete_entry(qmdl_store.deref_mut(), name.as_str()).await;
-                            if response_tx.send(resp).is_err() {
-                                error!("Failed to send delete entry respons, receiver dropped");
-                            }
-                        },
-                        Some(DiagDeviceCtrlMessage::DeleteAllEntries { response_tx }) => {
-                            let mut qmdl_store = qmdl_store_lock.write().await;
-                            let resp = diag_task.delete_all_entries(qmdl_store.deref_mut()).await;
-                            if response_tx.send(resp).is_err() {
-                                error!("Failed to send delete all entries respons, receiver dropped");
-                            }
-                        },
-                        Some(DiagDeviceCtrlMessage::GpsUpdate { lat, lon }) => {
-                            let qmdl_store = qmdl_store_lock.read().await;
-                            diag_task.handle_gps_update(&qmdl_store, lat, lon).await;
-                        },
-                    }
+
+        'reconnect: loop {
+            let mut dev = DiagDevice::new(&device).await?;
+            if let Err(err) = dev.config_logs().await {
+                if socket_transport {
+                    warn!("DIAG log config failed ({err}); reconnecting...");
+                    sleep(Duration::from_secs(1)).await;
+                    continue 'reconnect;
                 }
-                maybe_container = diag_stream.next() => {
-                    match maybe_container.unwrap() {
-                        Ok(container) => {
-                            let mut qmdl_store = qmdl_store_lock.write().await;
-                            diag_task.process_container(qmdl_store.deref_mut(), container).await
-                        },
-                        Err(err) => {
-                            error!("error reading diag device: {err}");
-                            return Err(err);
+                return Err(err);
+            }
+
+            let mut diag_stream = pin!(dev.as_stream().into_stream());
+            loop {
+                tokio::select! {
+                    msg = qmdl_file_rx.recv() => {
+                        match msg {
+                            Some(DiagDeviceCtrlMessage::StartRecording { response_tx }) => {
+                                let mut qmdl_store = qmdl_store_lock.write().await;
+                                let result = diag_task.start(qmdl_store.deref_mut()).await;
+                                if let Some(tx) = response_tx {
+                                    tx.send(result).ok();
+                                }
+                            },
+                            Some(DiagDeviceCtrlMessage::StopRecording) => {
+                                let mut qmdl_store = qmdl_store_lock.write().await;
+                                diag_task.stop(qmdl_store.deref_mut(), None).await;
+                            },
+                            // None means all the Senders have been dropped, so it's
+                            // time to go
+                            Some(DiagDeviceCtrlMessage::Exit) | None => {
+                                info!("Diag reader thread exiting...");
+                                let mut qmdl_store = qmdl_store_lock.write().await;
+                                diag_task.stop_current_recording(qmdl_store.deref_mut()).await;
+                                return Ok(())
+                            },
+                            Some(DiagDeviceCtrlMessage::DeleteEntry { name, response_tx }) => {
+                                let mut qmdl_store = qmdl_store_lock.write().await;
+                                let resp = diag_task.delete_entry(qmdl_store.deref_mut(), name.as_str()).await;
+                                if response_tx.send(resp).is_err() {
+                                    error!("Failed to send delete entry respons, receiver dropped");
+                                }
+                            },
+                            Some(DiagDeviceCtrlMessage::DeleteAllEntries { response_tx }) => {
+                                let mut qmdl_store = qmdl_store_lock.write().await;
+                                let resp = diag_task.delete_all_entries(qmdl_store.deref_mut()).await;
+                                if response_tx.send(resp).is_err() {
+                                    error!("Failed to send delete all entries respons, receiver dropped");
+                                }
+                            },
+                            Some(DiagDeviceCtrlMessage::GpsUpdate { lat, lon }) => {
+                                let qmdl_store = qmdl_store_lock.read().await;
+                                diag_task.handle_gps_update(&qmdl_store, lat, lon).await;
+                            },
+                        }
+                    }
+                    maybe_container = diag_stream.next() => {
+                        match maybe_container.unwrap() {
+                            Ok(container) => {
+                                let mut qmdl_store = qmdl_store_lock.write().await;
+                                diag_task.process_container(qmdl_store.deref_mut(), container).await
+                            },
+                            Err(err) => {
+                                error!("error reading diag device: {err}");
+                                if socket_transport {
+                                    warn!("DIAG bridge disconnected; reconnecting and resuming recording...");
+                                    break;
+                                }
+                                return Err(err);
+                            }
                         }
                     }
                 }

@@ -32,6 +32,14 @@ fn diag_socket_addr(device: &Device) -> Option<&'static str> {
     }
 }
 
+/// Whether a device's DIAG arrives over the TCP socket bridge (vs. a `/dev/diag`
+/// char device). Socket bridges (`diag_socket_log`) can drop the connection, so
+/// the daemon treats a read error as recoverable (reconnect) for these devices
+/// rather than fatal.
+pub fn uses_socket_diag(device: &Device) -> bool {
+    diag_socket_addr(device).is_some()
+}
+
 pub type DiagResult<T> = Result<T, DiagDeviceError>;
 
 #[derive(Error, Debug)]
@@ -259,10 +267,7 @@ impl DiagDevice {
                 // identical to the diagchar case — only the outer framing changed.
                 let mut buf = [0u8; 8192];
                 loop {
-                    if let Some(pos) = residual
-                        .iter()
-                        .rposition(|&b| b == MESSAGE_TERMINATOR)
-                    {
+                    if let Some(pos) = residual.iter().rposition(|&b| b == MESSAGE_TERMINATOR) {
                         let complete: Vec<u8> = residual.drain(..=pos).collect();
                         return Ok(MessagesContainer {
                             data_type: DataType::UserSpace,

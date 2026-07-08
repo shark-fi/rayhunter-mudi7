@@ -33,7 +33,7 @@ Everything downstream of the transport (parsing, analyzers, QMDL, web UI) is ups
 
 ## Install (LuCI)
 
-1. Download `mudi7/dist/rayhunter-mudi7_0.11.2-2_aarch64_cortex-a53.ipk`
+1. Download `mudi7/dist/rayhunter-mudi7_0.11.2-3_aarch64_cortex-a53.ipk`
    (or grab it from the repo's Releases).
 2. In the router UI go to **System → Software** (LuCI), click **Upload Package…**,
    choose the `.ipk`, and install.
@@ -44,8 +44,8 @@ The package enables and starts the service on install (survives reboot).
 ### Install (CLI)
 
 ```sh
-scp rayhunter-mudi7_0.11.2-2_aarch64_cortex-a53.ipk root@192.168.8.1:/tmp/
-ssh root@192.168.8.1 'opkg install /tmp/rayhunter-mudi7_0.11.2-2_aarch64_cortex-a53.ipk'
+scp rayhunter-mudi7_0.11.2-3_aarch64_cortex-a53.ipk root@192.168.8.1:/tmp/
+ssh root@192.168.8.1 'opkg install /tmp/rayhunter-mudi7_0.11.2-3_aarch64_cortex-a53.ipk'
 ```
 
 Manage it with `/etc/init.d/rayhunter {start,stop,enable,disable}`. Config lives at
