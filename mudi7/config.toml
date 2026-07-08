@@ -1,0 +1,11 @@
+# Rayhunter configuration — GL.iNet GL-E5800 (Mudi 7) port
+#
+# The Mudi 7's RG650 modem is MHI-attached and its DIAG is owned by diag-router;
+# there is no /dev/diag. The "gle5800" device makes rayhunter consume DIAG over a
+# local TCP socket (127.0.0.1:25011) fed by the diag_socket_log bridge instead.
+qmdl_store_path = "/data/rayhunter/qmdl"
+port = 8088
+device = "gle5800"
+# Headless: the Mudi 7 screen is driven by GL.iNet's closed LVGL stack, so the
+# on-device UI is disabled (web UI only).
+ui_level = 0

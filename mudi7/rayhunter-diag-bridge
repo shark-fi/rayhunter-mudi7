@@ -1,0 +1,29 @@
+#!/bin/sh
+# rayhunter-diag-bridge
+#
+# Feed rayhunter-daemon's DIAG socket listener from a modem whose DIAG is owned by
+# diag-router (GL.iNet / MSM MHI, e.g. the Mudi 7's RG650 — no /dev/diag node).
+# Qualcomm's diag_socket_log taps the diag-router stream and forwards raw HDLC diag
+# to a TCP peer; rayhunter LISTENS on 127.0.0.1:25011 (device="gle5800") and gets
+# the bidirectional diag access its parser needs. Mirrors surfscan-scat-diag-bridge.
+#
+# NOTE: diag_socket_log is effectively a single tap on diag-router, so rayhunter and
+# any other diag consumer (e.g. a SCAT walk-test bridge) are mutually exclusive —
+# run one diag consumer at a time. `-k` below ensures a clean single instance.
+PORT=25011
+
+cleanup() {
+    diag_socket_log -k 2>/dev/null
+}
+trap cleanup EXIT INT TERM
+
+# Ensure only one diag_socket_log tap is active.
+diag_socket_log -k 2>/dev/null
+
+# Give the daemon a moment to bind its listener, then connect; keep retrying if it
+# drops (e.g. daemon restart).
+sleep 3
+while true; do
+    diag_socket_log -a 127.0.0.1 -p "$PORT" -r 30 >/dev/null 2>&1
+    sleep 1
+done

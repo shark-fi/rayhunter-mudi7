@@ -40,4 +40,8 @@ pub enum Device {
     Pinephone,
     Uz801,
     Moxee,
+    /// GL.iNet GL-E5800 (Mudi 7). The RG650 modem is MHI-attached and owns DIAG
+    /// via `diag-router` — there is no `/dev/diag`. DIAG is consumed over a local
+    /// TCP socket fed by Qualcomm's `diag_socket_log` bridge (see diag_device.rs).
+    GlE5800,
 }

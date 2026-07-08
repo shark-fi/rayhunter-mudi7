@@ -252,6 +252,8 @@ async fn run_with_config(
             Device::Wingtech => display::wingtech::update_ui,
             Device::Pinephone => display::headless::update_ui,
             Device::Uz801 => display::uz801::update_ui,
+            // The Mudi 7's screen is driven by GL.iNet's closed LVGL stack; run headless.
+            Device::GlE5800 => display::headless::update_ui,
         };
         update_ui(&task_tracker, &config, shutdown_token.clone(), ui_update_rx);
 

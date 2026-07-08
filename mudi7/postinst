@@ -1,0 +1,7 @@
+#!/bin/sh
+# Enable + start the service on real installs (skip when building an image offline).
+[ -n "${IPKG_INSTROOT}" ] && exit 0
+mkdir -p /data/rayhunter/qmdl
+/etc/init.d/rayhunter enable
+/etc/init.d/rayhunter start
+exit 0

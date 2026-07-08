@@ -1,6 +1,7 @@
 use crate::diag::{
-    CRC_CCITT, DataType, DiagParsingError, LogConfigRequest, LogConfigResponse, Message,
-    MessagesContainer, Request, RequestContainer, ResponsePayload, build_log_mask_request,
+    CRC_CCITT, DataType, DiagParsingError, HdlcEncapsulatedMessage, LogConfigRequest,
+    LogConfigResponse, MESSAGE_TERMINATOR, Message, MessagesContainer, Request, RequestContainer,
+    ResponsePayload, build_log_mask_request,
 };
 use crate::hdlc::hdlc_encapsulate;
 use crate::{Device, log_codes};
@@ -14,7 +15,22 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::time::sleep;
+
+/// Devices whose DIAG is exposed only over a local TCP socket (fed by an external
+/// bridge such as Qualcomm's `diag_socket_log`) rather than a `/dev/diag` char
+/// device. Rayhunter LISTENS on this address; the bridge connects in and forwards
+/// the raw HDLC-framed DIAG stream bidirectionally.
+///
+/// Port 25011 is deliberately distinct from SurfScan's SCAT bridge (25010) so both
+/// diag consumers can coexist behind separate `diag_socket_log` instances.
+fn diag_socket_addr(device: &Device) -> Option<&'static str> {
+    match device {
+        Device::GlE5800 => Some("127.0.0.1:25011"),
+        _ => None,
+    }
+}
 
 pub type DiagResult<T> = Result<T, DiagDeviceError>;
 
@@ -79,9 +95,25 @@ const DIAG_IOCTL_SWITCH_LOGGING: u64 = 7;
 #[cfg(all(not(target_env = "musl"), target_arch = "aarch64"))]
 const DIAG_IOCTL_SWITCH_LOGGING: u64 = 7;
 
+/// The underlying DIAG transport. Classic Qualcomm devices expose a `/dev/diag`
+/// char device driven with ioctls and the diagchar "memory device mode" container
+/// framing (`Char`). MHI/diag-router devices (e.g. the Mudi 7) have no `/dev/diag`;
+/// DIAG is carried as raw HDLC frames over a TCP socket (`Socket`).
+enum DiagTransport {
+    Char {
+        file: File,
+        read_buf: Vec<u8>,
+    },
+    Socket {
+        stream: TcpStream,
+        /// Bytes read from the socket that don't yet form a complete HDLC frame
+        /// (i.e. everything after the last `0x7e` terminator seen so far).
+        residual: Vec<u8>,
+    },
+}
+
 pub struct DiagDevice {
-    file: File,
-    read_buf: Vec<u8>,
+    transport: DiagTransport,
     use_mdm: i32,
 }
 
@@ -129,6 +161,15 @@ impl DiagDevice {
     }
 
     async fn try_new(configured_device: &Device) -> DiagResult<Self> {
+        match diag_socket_addr(configured_device) {
+            Some(addr) => Self::try_new_socket(addr).await,
+            None => Self::try_new_char(configured_device).await,
+        }
+    }
+
+    /// Classic path: open `/dev/diag` and switch the diagchar driver into memory
+    /// device mode via ioctls.
+    async fn try_new_char(configured_device: &Device) -> DiagResult<Self> {
         let diag_file = File::options()
             .read(true)
             .write(true)
@@ -141,9 +182,39 @@ impl DiagDevice {
         let use_mdm = determine_use_mdm(fd)?;
 
         Ok(DiagDevice {
-            read_buf: vec![0; BUFFER_LEN],
-            file: diag_file,
+            transport: DiagTransport::Char {
+                file: diag_file,
+                read_buf: vec![0; BUFFER_LEN],
+            },
             use_mdm,
+        })
+    }
+
+    /// Socket path (MHI / diag-router devices): bind and wait for the external
+    /// DIAG bridge (`diag_socket_log`) to connect, then read/write raw HDLC-framed
+    /// DIAG directly. No `/dev/diag`, no ioctls, and no diagchar container framing —
+    /// the socket carries exactly the HDLC frames the diag parser already speaks.
+    async fn try_new_socket(addr: &str) -> DiagResult<Self> {
+        let listener = TcpListener::bind(addr)
+            .await
+            .map_err(DiagDeviceError::OpenDiagDeviceError)?;
+        info!("waiting for DIAG bridge (diag_socket_log) to connect on {addr}...");
+        let (stream, peer) = listener
+            .accept()
+            .await
+            .map_err(DiagDeviceError::OpenDiagDeviceError)?;
+        stream
+            .set_nodelay(true)
+            .map_err(DiagDeviceError::OpenDiagDeviceError)?;
+        info!("DIAG bridge connected from {peer}");
+
+        Ok(DiagDevice {
+            transport: DiagTransport::Socket {
+                stream,
+                residual: Vec::new(),
+            },
+            // The socket stream carries no MDM mask; requests go out as bare HDLC.
+            use_mdm: 0,
         })
     }
 
@@ -157,51 +228,110 @@ impl DiagDevice {
     }
 
     async fn get_next_messages_container(&mut self) -> Result<MessagesContainer, DiagDeviceError> {
-        let mut bytes_read = 0;
-        // TP-Link M7350 sometimes sends too small messages, we need to be able to deal with short reads.
-        while bytes_read <= 8 {
-            bytes_read = self
-                .file
-                .read(&mut self.read_buf)
-                .await
-                .map_err(DiagDeviceError::DeviceReadFailed)?;
-        }
+        match &mut self.transport {
+            DiagTransport::Char { file, read_buf } => {
+                let mut bytes_read = 0;
+                // TP-Link M7350 sometimes sends too small messages, we need to be able to deal with short reads.
+                while bytes_read <= 8 {
+                    bytes_read = file
+                        .read(read_buf)
+                        .await
+                        .map_err(DiagDeviceError::DeviceReadFailed)?;
+                }
 
-        debug!(
-            "Parsing messages container size = {:?} [{:?}]",
-            bytes_read,
-            &self.read_buf[0..bytes_read]
-        );
+                debug!(
+                    "Parsing messages container size = {:?} [{:?}]",
+                    bytes_read,
+                    &read_buf[0..bytes_read]
+                );
 
-        match MessagesContainer::from_bytes((&self.read_buf[0..bytes_read], 0)) {
-            Ok((_, container)) => Ok(container),
-            Err(err) => Err(DiagDeviceError::ParseMessagesContainerError(err)),
+                match MessagesContainer::from_bytes((&read_buf[0..bytes_read], 0)) {
+                    Ok((_, container)) => Ok(container),
+                    Err(err) => Err(DiagDeviceError::ParseMessagesContainerError(err)),
+                }
+            }
+            DiagTransport::Socket { stream, residual } => {
+                // The bridge delivers a raw TCP byte stream of HDLC frames, each
+                // terminated by MESSAGE_TERMINATOR (0x7e). Accumulate until we have
+                // at least one complete frame, then hand every complete frame up as
+                // a single synthetic UserSpace container. `MessagesContainer::messages()`
+                // re-splits the blob on 0x7e, so the downstream parsing path is
+                // identical to the diagchar case — only the outer framing changed.
+                let mut buf = [0u8; 8192];
+                loop {
+                    if let Some(pos) = residual
+                        .iter()
+                        .rposition(|&b| b == MESSAGE_TERMINATOR)
+                    {
+                        let complete: Vec<u8> = residual.drain(..=pos).collect();
+                        return Ok(MessagesContainer {
+                            data_type: DataType::UserSpace,
+                            num_messages: 1,
+                            messages: vec![HdlcEncapsulatedMessage {
+                                len: complete.len() as u32,
+                                data: complete,
+                            }],
+                        });
+                    }
+
+                    let n = stream
+                        .read(&mut buf)
+                        .await
+                        .map_err(DiagDeviceError::DeviceReadFailed)?;
+                    if n == 0 {
+                        return Err(DiagDeviceError::DeviceReadFailed(std::io::Error::new(
+                            ErrorKind::UnexpectedEof,
+                            "DIAG bridge closed the socket",
+                        )));
+                    }
+                    residual.extend_from_slice(&buf[..n]);
+                }
+            }
         }
     }
 
     async fn write_request(&mut self, req: &Request) -> DiagResult<()> {
         let req_bytes = &req.to_bytes().expect("Failed to serialize Request");
-        let buf = RequestContainer {
-            data_type: DataType::UserSpace,
-            use_mdm: self.use_mdm > 0,
-            mdm_field: -1,
-            hdlc_encapsulated_request: hdlc_encapsulate(req_bytes, &CRC_CCITT),
-        }
-        .to_bytes()
-        .expect("Failed to serialize RequestContainer");
-        if let Err(err) = self.file.write(&buf).await {
-            // For reasons I don't entirely understand, calls to write(2) on
-            // /dev/diag always return 0 bytes written, though the written
-            // requests end up being interpreted. As such, we're not concerned
-            // about WriteZero errors
-            if err.kind() != ErrorKind::WriteZero {
-                return Err(DiagDeviceError::DeviceWriteFailed(err));
+        let use_mdm = self.use_mdm > 0;
+        match &mut self.transport {
+            DiagTransport::Char { file, .. } => {
+                let buf = RequestContainer {
+                    data_type: DataType::UserSpace,
+                    use_mdm,
+                    mdm_field: -1,
+                    hdlc_encapsulated_request: hdlc_encapsulate(req_bytes, &CRC_CCITT),
+                }
+                .to_bytes()
+                .expect("Failed to serialize RequestContainer");
+                if let Err(err) = file.write(&buf).await {
+                    // For reasons I don't entirely understand, calls to write(2) on
+                    // /dev/diag always return 0 bytes written, though the written
+                    // requests end up being interpreted. As such, we're not concerned
+                    // about WriteZero errors
+                    if err.kind() != ErrorKind::WriteZero {
+                        return Err(DiagDeviceError::DeviceWriteFailed(err));
+                    }
+                }
+                if let Err(err) = file.flush().await
+                    && err.kind() != ErrorKind::WriteZero
+                {
+                    return Err(DiagDeviceError::DeviceWriteFailed(err));
+                }
             }
-        }
-        if let Err(err) = self.file.flush().await
-            && err.kind() != ErrorKind::WriteZero
-        {
-            return Err(DiagDeviceError::DeviceWriteFailed(err));
+            DiagTransport::Socket { stream, .. } => {
+                // Over the socket the bridge speaks raw HDLC-framed DIAG — no
+                // diagchar container, no MDM field. Send the HDLC-wrapped request
+                // straight through (this mirrors SCAT's SocketIO.write(encode_hdlc)).
+                let buf = hdlc_encapsulate(req_bytes, &CRC_CCITT);
+                stream
+                    .write_all(&buf)
+                    .await
+                    .map_err(DiagDeviceError::DeviceWriteFailed)?;
+                stream
+                    .flush()
+                    .await
+                    .map_err(DiagDeviceError::DeviceWriteFailed)?;
+            }
         }
         Ok(())
     }

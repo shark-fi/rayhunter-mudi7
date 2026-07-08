@@ -1,0 +1,44 @@
+#!/bin/sh /etc/rc.common
+# Rayhunter IMSI-catcher detector — GL.iNet GL-E5800 (Mudi 7) port
+# procd service: runs the rayhunter daemon plus the diag_socket_log bridge that
+# feeds it DIAG from the diag-router-owned RG650 modem.
+
+START=99
+STOP=10
+USE_PROCD=1
+
+PROG=/usr/bin/rayhunter-daemon
+CONF=/etc/rayhunter/config.toml
+BRIDGE=/usr/bin/rayhunter-diag-bridge
+
+start_service() {
+    # Web UI + DIAG analyzer. Binds 127.0.0.1:25011 for the diag bridge and
+    # 0.0.0.0:<port> (config.toml) for the web UI.
+    procd_open_instance rayhunter-daemon
+    procd_set_param command "$PROG" "$CONF"
+    procd_set_param respawn 3600 5 5
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_set_param pidfile /var/run/rayhunter-daemon.pid
+    procd_close_instance
+
+    # DIAG bridge: diag_socket_log -> rayhunter's socket listener.
+    procd_open_instance rayhunter-diag-bridge
+    procd_set_param command /bin/sh "$BRIDGE"
+    procd_set_param respawn 3600 5 0
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+
+    logger -t rayhunter "Rayhunter daemon + diag bridge started"
+}
+
+stop_service() {
+    killall diag_socket_log 2>/dev/null
+    logger -t rayhunter "Rayhunter stopped"
+}
+
+reload_service() {
+    stop
+    start
+}
