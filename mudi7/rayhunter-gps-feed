@@ -1,0 +1,29 @@
+#!/bin/sh
+# rayhunter-gps-feed
+#
+# The Mudi 7's RG650 modem has GNSS, but Rayhunter has no built-in modem-GPS
+# reader — it accepts external fixes via POST /api/gps when gps_mode = Api (2).
+# This polls the modem's GNSS (AT+QGPSLOC) and forwards fixes to that endpoint so
+# captures get location-tagged. A missing fix (indoors / cold start, +CME ERROR
+# 516) is handled quietly. Disable GPS by setting gps_mode = 0 in config.toml.
+API="http://127.0.0.1:8088/api/gps"
+INTERVAL=5
+
+# Make sure GNSS is powered on (harmless if it already is).
+gl_modem -B cpu AT "AT+QGPS=1" >/dev/null 2>&1
+
+while true; do
+    line=$(gl_modem -B cpu AT "AT+QGPSLOC=2" 2>/dev/null | grep "+QGPSLOC:")
+    if [ -n "$line" ]; then
+        # +QGPSLOC: <utc>,<lat>,<lon>,<hdop>,<alt>,<fix>,...  (mode 2 = decimal degrees)
+        rest=${line#*+QGPSLOC: }
+        lat=$(echo "$rest" | cut -d, -f2)
+        lon=$(echo "$rest" | cut -d, -f3)
+        # Only post well-formed decimal coordinates.
+        if echo "$lat" | grep -qE '^-?[0-9]+\.[0-9]+$' && echo "$lon" | grep -qE '^-?[0-9]+\.[0-9]+$'; then
+            curl -s -o /dev/null -m 3 -X POST -H "Content-Type: application/json" \
+                -d "{\"latitude\":$lat,\"longitude\":$lon}" "$API"
+        fi
+    fi
+    sleep "$INTERVAL"
+done

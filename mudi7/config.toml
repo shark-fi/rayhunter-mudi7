@@ -9,3 +9,7 @@ device = "gle5800"
 # Headless: the Mudi 7 screen is driven by GL.iNet's closed LVGL stack, so the
 # on-device UI is disabled (web UI only).
 ui_level = 0
+# GPS: 2 = Api. The rayhunter-gps-feed service polls the RG650 modem's GNSS
+# (AT+QGPSLOC) and POSTs fixes to /api/gps so captures are location-tagged. Set to
+# 0 to disable GPS entirely (the feed service won't start).
+gps_mode = 2

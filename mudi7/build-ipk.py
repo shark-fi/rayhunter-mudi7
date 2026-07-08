@@ -20,7 +20,7 @@ import os
 import tarfile
 
 PKG = "rayhunter-mudi7"
-VERSION = "0.11.2-3"
+VERSION = "0.11.2-4"
 ARCH = "aarch64_cortex-a53"
 MTIME = 1609459200  # fixed for reproducible archives
 
@@ -68,6 +68,7 @@ def main():
     with open(args.binary, "rb") as f:
         binary = f.read()
     bridge = open(os.path.join(HERE, "rayhunter-diag-bridge"), "rb").read()
+    gpsfeed = open(os.path.join(HERE, "rayhunter-gps-feed"), "rb").read()
     initsc = open(os.path.join(HERE, "rayhunter.init"), "rb").read()
     config = open(os.path.join(HERE, "config.toml"), "rb").read()
 
@@ -76,6 +77,7 @@ def main():
     data_entries = [
         ("./usr/bin/rayhunter-daemon", binary, 0o755),
         ("./usr/bin/rayhunter-diag-bridge", bridge, 0o755),
+        ("./usr/bin/rayhunter-gps-feed", gpsfeed, 0o755),
         ("./etc/init.d/rayhunter", initsc, 0o755),
         ("./etc/rayhunter/config.toml", config, 0o644),
     ]

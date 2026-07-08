@@ -24,16 +24,17 @@ module, no ioctls — the existing HDLC parser handles the frames unchanged.
 | File | Change |
 |---|---|
 | `lib/src/lib.rs` | New `Device::GlE5800` (`device = "gle5800"`) |
-| `lib/src/diag_device.rs` | New `DiagTransport::Socket` variant (TCP listener, bare-HDLC I/O, no ioctls) |
+| `lib/src/diag_device.rs` | New `DiagTransport::Socket` variant (TCP listener, bare-HDLC I/O, no ioctls, enlarged `SO_RCVBUF`) |
+| `daemon/src/diag.rs` | Reconnect loop: on a bridge drop, rebuild the device and resume the same recording |
 | `daemon/src/main.rs` | Headless UI arm for the Mudi 7 (its screen is GL's closed LVGL stack) |
 | `daemon/src/battery/gl_e5800.rs` | Battery level + charge state from the cw221X fuel gauge (sysfs) |
-| `mudi7/` | OpenWrt packaging: config, init service, diag bridge, `.ipk` builder |
+| `mudi7/` | OpenWrt packaging: config, init service, diag bridge, GPS feed (modem GNSS → `/api/gps`), `.ipk` builder |
 
 Everything downstream of the transport (parsing, analyzers, QMDL, web UI) is upstream code.
 
 ## Install (LuCI)
 
-1. Download `mudi7/dist/rayhunter-mudi7_0.11.2-3_aarch64_cortex-a53.ipk`
+1. Download `mudi7/dist/rayhunter-mudi7_0.11.2-4_aarch64_cortex-a53.ipk`
    (or grab it from the repo's Releases).
 2. In the router UI go to **System → Software** (LuCI), click **Upload Package…**,
    choose the `.ipk`, and install.
@@ -44,8 +45,8 @@ The package enables and starts the service on install (survives reboot).
 ### Install (CLI)
 
 ```sh
-scp rayhunter-mudi7_0.11.2-3_aarch64_cortex-a53.ipk root@192.168.8.1:/tmp/
-ssh root@192.168.8.1 'opkg install /tmp/rayhunter-mudi7_0.11.2-3_aarch64_cortex-a53.ipk'
+scp rayhunter-mudi7_0.11.2-4_aarch64_cortex-a53.ipk root@192.168.8.1:/tmp/
+ssh root@192.168.8.1 'opkg install /tmp/rayhunter-mudi7_0.11.2-4_aarch64_cortex-a53.ipk'
 ```
 
 Manage it with `/etc/init.d/rayhunter {start,stop,enable,disable}`. Config lives at

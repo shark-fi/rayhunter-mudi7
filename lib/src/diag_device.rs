@@ -214,6 +214,23 @@ impl DiagDevice {
         stream
             .set_nodelay(true)
             .map_err(DiagDeviceError::OpenDiagDeviceError)?;
+
+        // Enlarge the receive buffer so a burst of DIAG logs from the modem doesn't
+        // overrun the kernel socket buffer while we're busy parsing/analyzing the
+        // previous batch — that overrun is what makes diag_socket_log reset the
+        // connection. SO_RCVBUFFORCE (root-only) bypasses the net.core.rmem_max cap
+        // that would otherwise clamp a plain SO_RCVBUF request; fall back to
+        // SO_RCVBUF if that's denied. Best-effort — failures are non-fatal.
+        let rcvbuf: libc::c_int = 4 * 1024 * 1024;
+        let fd = stream.as_raw_fd();
+        let len = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+        let ptr = &rcvbuf as *const libc::c_int as *const libc::c_void;
+        unsafe {
+            if libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVBUFFORCE, ptr, len) < 0 {
+                libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_RCVBUF, ptr, len);
+            }
+        }
+
         info!("DIAG bridge connected from {peer}");
 
         Ok(DiagDevice {
