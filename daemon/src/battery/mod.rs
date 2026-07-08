@@ -11,6 +11,7 @@ use crate::{
     notifications::{Notification, NotificationType},
 };
 
+pub mod gl_e5800;
 pub mod orbic;
 pub mod tmobile;
 pub mod tplink;
@@ -56,6 +57,7 @@ pub async fn get_battery_status(device: &Device) -> Result<BatteryState, Rayhunt
         Device::Wingtech => wingtech::get_battery_state().await?,
         Device::Tmobile => tmobile::get_battery_state().await?,
         Device::Tplink => tplink::get_battery_state().await?,
+        Device::GlE5800 => gl_e5800::get_battery_state().await?,
         _ => return Err(RayhunterError::FunctionNotSupportedForDeviceError),
     })
 }

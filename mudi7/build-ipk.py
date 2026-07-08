@@ -20,7 +20,7 @@ import os
 import tarfile
 
 PKG = "rayhunter-mudi7"
-VERSION = "0.11.2-1"
+VERSION = "0.11.2-2"
 ARCH = "aarch64_cortex-a53"
 MTIME = 1609459200  # fixed for reproducible archives
 
