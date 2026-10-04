@@ -81,7 +81,15 @@ impl AnalysisWriter {
     }
 
     // Flushes any pending I/O to disk before dropping the writer
+    pub async fn reset_reassembly(&mut self) -> Result<(), std::io::Error> {
+        if let Some(row) = self.harness.finish_qmdl_analysis() {
+            self.write(&row).await?;
+        }
+        Ok(())
+    }
+
     pub async fn close(mut self) -> Result<(), std::io::Error> {
+        self.reset_reassembly().await?;
         self.writer.flush().await?;
         Ok(())
     }

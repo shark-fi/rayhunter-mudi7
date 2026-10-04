@@ -46,7 +46,7 @@ pub enum LteRrcOtaPacket {
         #[deku(count = "len")]
         packet: Vec<u8>,
     },
-    #[deku(id_pat = "25..")]
+    #[deku(id_pat = "25..=29")]
     V25 {
         rrc_rel_maj: u8,
         rrc_rel_min: u8,
@@ -62,6 +62,25 @@ pub enum LteRrcOtaPacket {
         #[deku(count = "len")]
         packet: Vec<u8>,
     },
+    #[deku(id = "30")]
+    V30 {
+        rrc_rel_maj: u8,
+        rrc_rel_min: u8,
+        nr_rrc_rel_maj: u8,
+        nr_rrc_rel_min: u8,
+        bearer_id: u8,
+        phy_cell_id: u16,
+        earfcn: u32,
+        sfn_subfn: u16,
+        pdu_num: u8,
+        sib_mask: u32,
+        len: u16,
+        unknown1: u8,
+        unknown2: u8,
+        segment_id: u8,
+        #[deku(count = "len")]
+        packet: Vec<u8>,
+    },
 }
 
 impl LteRrcOtaPacket {
@@ -71,6 +90,7 @@ impl LteRrcOtaPacket {
             LteRrcOtaPacket::V5 { sfn_subfn, .. } => *sfn_subfn,
             LteRrcOtaPacket::V8 { sfn_subfn, .. } => *sfn_subfn,
             LteRrcOtaPacket::V25 { sfn_subfn, .. } => *sfn_subfn,
+            LteRrcOtaPacket::V30 { sfn_subfn, .. } => *sfn_subfn,
         }
     }
     pub fn get_sfn(&self) -> u32 {
@@ -87,6 +107,7 @@ impl LteRrcOtaPacket {
             LteRrcOtaPacket::V5 { pdu_num, .. } => *pdu_num,
             LteRrcOtaPacket::V8 { pdu_num, .. } => *pdu_num,
             LteRrcOtaPacket::V25 { pdu_num, .. } => *pdu_num,
+            LteRrcOtaPacket::V30 { pdu_num, .. } => *pdu_num,
         }
     }
 
@@ -96,6 +117,7 @@ impl LteRrcOtaPacket {
             LteRrcOtaPacket::V5 { earfcn, .. } => *earfcn as u32,
             LteRrcOtaPacket::V8 { earfcn, .. } => *earfcn,
             LteRrcOtaPacket::V25 { earfcn, .. } => *earfcn,
+            LteRrcOtaPacket::V30 { earfcn, .. } => *earfcn,
         }
     }
 
@@ -105,6 +127,7 @@ impl LteRrcOtaPacket {
             LteRrcOtaPacket::V5 { packet, .. } => packet,
             LteRrcOtaPacket::V8 { packet, .. } => packet,
             LteRrcOtaPacket::V25 { packet, .. } => packet,
+            LteRrcOtaPacket::V30 { packet, .. } => packet,
         }
     }
 }

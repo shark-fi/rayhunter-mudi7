@@ -1,0 +1,10 @@
+name: Prepare LTE decoders
+description: Download and correct checksum-pinned decoder sources for this draft
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - shell: bash
+      run: python tools/prepare-lte-decoders.py

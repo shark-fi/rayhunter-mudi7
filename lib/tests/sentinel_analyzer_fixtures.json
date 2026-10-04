@@ -1,0 +1,235 @@
+[
+  {
+    "name": "RRC EEA0 is High",
+    "target": 3,
+    "expected": "High",
+    "packets": [
+      {
+        "channel": 9,
+        "hex": "300020"
+      }
+    ]
+  },
+  {
+    "name": "RRC EEA2 is not a null-cipher alert",
+    "target": 3,
+    "expected": null,
+    "packets": [
+      {
+        "channel": 9,
+        "hex": "300220"
+      }
+    ]
+  },
+  {
+    "name": "GERAN redirection is High",
+    "target": 1,
+    "expected": "High",
+    "packets": [
+      {
+        "channel": 9,
+        "hex": "2822200800"
+      }
+    ]
+  },
+  {
+    "name": "LTE redirection is informational",
+    "target": 1,
+    "expected": "Informational",
+    "packets": [
+      {
+        "channel": 9,
+        "hex": "2822000020"
+      }
+    ]
+  },
+  {
+    "name": "Known NR redirection CHOICE extension decodes, not GERAN",
+    "target": 1,
+    "expected": "Informational",
+    "packets": [
+      {
+        "channel": 9,
+        "hex": "2823020800000400"
+      }
+    ]
+  },
+  {
+    "name": "NAS EEA0 is High",
+    "target": 4,
+    "expected": "High",
+    "packets": [
+      {
+        "channel": 0,
+        "hex": "075d000002e0e0"
+      }
+    ]
+  },
+  {
+    "name": "NAS EEA2 is not a null-cipher alert",
+    "target": 4,
+    "expected": null,
+    "packets": [
+      {
+        "channel": 0,
+        "hex": "075d200002e0e0"
+      }
+    ]
+  },
+  {
+    "name": "Identity after authentication is High",
+    "target": 0,
+    "expected": "High",
+    "packets": [
+      {
+        "channel": 0,
+        "hex": "07530401020304"
+      },
+      {
+        "channel": 0,
+        "hex": "075501"
+      }
+    ]
+  },
+  {
+    "name": "Identity before authentication is not suspicious",
+    "target": 0,
+    "expected": null,
+    "packets": [
+      {
+        "channel": 0,
+        "hex": "075501"
+      },
+      {
+        "channel": 0,
+        "hex": "07530401020304"
+      }
+    ]
+  },
+  {
+    "name": "Identity after rejection is High",
+    "target": 0,
+    "expected": "High",
+    "packets": [
+      {
+        "channel": 0,
+        "hex": "074403"
+      },
+      {
+        "channel": 0,
+        "hex": "075501"
+      }
+    ]
+  },
+  {
+    "name": "Identity request emits diagnostic information",
+    "target": 7,
+    "expected": "Informational",
+    "packets": [
+      {
+        "channel": 0,
+        "hex": "075501"
+      }
+    ]
+  },
+  {
+    "name": "Authentication response is not an exposure diagnostic",
+    "target": 7,
+    "expected": null,
+    "packets": [
+      {
+        "channel": 0,
+        "hex": "07530401020304"
+      }
+    ]
+  },
+  {
+    "name": "SIB1 produces Low test event",
+    "target": 6,
+    "expected": "Low",
+    "packets": [
+      {
+        "channel": 3,
+        "hex": "4040040300000000000828009081049400"
+      }
+    ]
+  },
+  {
+    "name": "Non-SIB1 does not produce test event",
+    "target": 6,
+    "expected": null,
+    "packets": [
+      {
+        "channel": 9,
+        "hex": "300220"
+      }
+    ]
+  },
+  {
+    "name": "Short SIB1 schedule is informational",
+    "target": 5,
+    "expected": "Informational",
+    "packets": [
+      {
+        "channel": 3,
+        "hex": "404004030000000000082800108280"
+      }
+    ]
+  },
+  {
+    "name": "Complete SIB1 schedule is not malformed",
+    "target": 5,
+    "expected": null,
+    "packets": [
+      {
+        "channel": 3,
+        "hex": "4040040300000000000828009081049400"
+      }
+    ]
+  },
+  {
+    "name": "Higher legacy priority is High",
+    "target": 2,
+    "expected": "High",
+    "packets": [
+      {
+        "channel": 3,
+        "hex": "0084000814014800020170000000"
+      },
+      {
+        "channel": 3,
+        "hex": "4040040300000000000828009081049400"
+      }
+    ]
+  },
+  {
+    "name": "Lower legacy priority is not downgrade",
+    "target": 2,
+    "expected": null,
+    "packets": [
+      {
+        "channel": 3,
+        "hex": "0084003814014800020110000000"
+      },
+      {
+        "channel": 3,
+        "hex": "4040040300000000000828009081049400"
+      }
+    ]
+  },
+  {
+    "name": "Equal legacy priority is not downgrade",
+    "target": 2,
+    "expected": null,
+    "packets": [
+      {
+        "channel": 3,
+        "hex": "0084001814014800020130000000"
+      },
+      {
+        "channel": 3,
+        "hex": "4040040300000000000828009081049400"
+      }
+    ]
+  }
+]

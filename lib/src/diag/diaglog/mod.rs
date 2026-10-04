@@ -126,6 +126,7 @@ pub(crate) mod test {
             msg,
             Message::Log {
                 pending_msgs: 0,
+                subscription: None,
                 outer_length: 38,
                 inner_length: 38,
                 log_type: 0xb0c0,
@@ -274,6 +275,7 @@ pub(crate) mod test {
         let length_with_payload = 31 + payload.len() as u16;
         let message = Message::Log {
             pending_msgs: 0,
+            subscription: None,
             outer_length: length_with_payload,
             inner_length: length_with_payload,
             log_type: 0xb0c0,
