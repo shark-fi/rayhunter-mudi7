@@ -142,9 +142,33 @@ where
     let mut pcap_writer = GsmtapPcapWriter::new(writer).await?;
     pcap_writer.write_iface_header().await?;
 
+    let mut reassembly = rayhunter::analysis::reassembly::RrcReassembly::default();
     while let Some(maybe_msg) = reader.get_next_message().await? {
         match maybe_msg {
             Ok(msg) => {
+                let now = std::time::Instant::now();
+                let timestamp = match &msg {
+                    rayhunter::diag::Message::Log { timestamp, .. } => {
+                        Some(timestamp.to_datetime().timestamp_millis())
+                    }
+                    _ => None,
+                };
+                let expired = reassembly.expire(timestamp, now);
+                if expired > 0 {
+                    error!("PCAP: {expired} incomplete RRC assemblies expired");
+                }
+                let msg = match reassembly.process(msg, now) {
+                    Ok(Some(msg)) => msg,
+                    Ok(None) => continue,
+                    Err(reason) => {
+                        error!("PCAP RRC reassembly failed: {reason}");
+                        continue;
+                    }
+                };
+                let interrupted = reassembly.take_interrupted();
+                if interrupted > 0 {
+                    error!("PCAP: {interrupted} RRC assemblies interrupted");
+                }
                 let maybe_gsmtap_msg = gsmtap_parser::parse(msg)?;
                 if let Some((timestamp, gsmtap_msg)) = maybe_gsmtap_msg {
                     let packet_unix_ts = timestamp.to_datetime().timestamp();
@@ -154,10 +178,27 @@ where
                         .await?;
                 }
             }
-            Err(e) => error!("error parsing message: {e:?}"),
+            Err(e) => {
+                if matches!(
+                    &e,
+                    rayhunter::diag::DiagParsingError::HdlcDecapsulationError(..)
+                ) {
+                    let incomplete = reassembly.clear();
+                    if incomplete > 0 {
+                        error!(
+                            "PCAP: {incomplete} incomplete RRC assemblies discarded after framing corruption"
+                        );
+                    }
+                }
+                error!("error parsing message: {e:?}");
+            }
         }
     }
 
+    let incomplete = reassembly.clear();
+    if incomplete > 0 {
+        error!("PCAP: {incomplete} incomplete RRC assemblies at end of capture");
+    }
     Ok(())
 }
 

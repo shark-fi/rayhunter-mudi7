@@ -91,6 +91,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: ./.github/actions/prepare-lte-decoders
       - uses: Swatinem/rust-cache@v2
       - name: Install mdBook
         run: |
@@ -109,6 +110,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: ./.github/actions/prepare-lte-decoders
       - uses: Swatinem/rust-cache@v2
       - name: Install mdBook
         run: |
@@ -133,6 +135,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
+    - uses: ./.github/actions/prepare-lte-decoders
     - uses: dtolnay/rust-toolchain@stable
       with:
         components: rustfmt, clippy
@@ -169,6 +172,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
+    - uses: ./.github/actions/prepare-lte-decoders
     - uses: dtolnay/rust-toolchain@stable
       with:
         components: clippy
@@ -229,6 +233,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: ./.github/actions/prepare-lte-decoders
       - uses: Swatinem/rust-cache@v2
       - name: cargo check
         shell: bash
@@ -275,6 +280,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: ./.github/actions/prepare-lte-decoders
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform.target }}
@@ -302,6 +308,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: ./.github/actions/prepare-lte-decoders
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: armv7-unknown-linux-musleabihf
@@ -351,6 +358,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: ./.github/actions/prepare-lte-decoders
       - name: Build frontend
         run: |
           pushd daemon/web
@@ -413,6 +421,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: ./.github/actions/prepare-lte-decoders
       - uses: actions/download-artifact@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -456,6 +465,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: ./.github/actions/prepare-lte-decoders
       - uses: actions/download-artifact@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -509,6 +519,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: ./.github/actions/prepare-lte-decoders
       - uses: actions/download-artifact@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -552,6 +563,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: ./.github/actions/prepare-lte-decoders
       - uses: actions/download-artifact@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -638,6 +650,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: ./.github/actions/prepare-lte-decoders
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: armv7-unknown-linux-musleabihf

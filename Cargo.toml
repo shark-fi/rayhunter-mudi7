@@ -21,3 +21,9 @@ default-members = [
     "installer",
 ]
 resolver = "2"
+
+[patch.crates-io]
+asn1_codecs_derive = { path = "sentinel-vendor/asn1_codecs_derive-0.7.1" }
+
+[patch."https://github.com/EFForg/pycrate-rs"]
+pycrate-rs = { path = "sentinel-vendor/pycrate-rs-9e72e40bee9c3c09205ad871cf681628b443de7c" }

@@ -239,8 +239,6 @@ dependencies = [
 [[package]]
 name = "asn1_codecs_derive"
 version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "129a9f02b40e743766102dbbb93464b5868fb5e264a02a10d87fb45c472dd4b7"
 dependencies = [
  "asn1-codecs",
  "bitvec",
@@ -4625,7 +4623,6 @@ dependencies = [
 [[package]]
 name = "pycrate-rs"
 version = "0.1.0"
-source = "git+https://github.com/EFForg/pycrate-rs#9e72e40bee9c3c09205ad871cf681628b443de7c"
 dependencies = [
  "clap",
  "deku 0.18.1",

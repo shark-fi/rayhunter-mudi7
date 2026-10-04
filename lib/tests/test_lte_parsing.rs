@@ -19,6 +19,7 @@ fn test_lte_rrc_ota() {
         &parsed,
         &Message::Log {
             pending_msgs: 0,
+            subscription: None,
             outer_length: 0x23,
             inner_length: 0x23,
             timestamp: Timestamp { ts: 0 },
@@ -63,6 +64,7 @@ fn test_lte_rrc_ota() {
         &parsed,
         &Message::Log {
             pending_msgs: 0,
+            subscription: None,
             outer_length: 35,
             inner_length: 35,
             timestamp: Timestamp { ts: 0 },
@@ -108,6 +110,7 @@ fn test_lte_rrc_ota() {
         &parsed,
         &Message::Log {
             pending_msgs: 0,
+            subscription: None,
             outer_length: 44,
             inner_length: 44,
             timestamp: Timestamp { ts: 0 },
@@ -158,6 +161,7 @@ fn test_lte_rrc_ota() {
         &parsed,
         &Message::Log {
             pending_msgs: 0,
+            subscription: None,
             outer_length: 55,
             inner_length: 55,
             timestamp: Timestamp { ts: 0 },
@@ -209,6 +213,7 @@ fn test_lte_rrc_ota() {
         &parsed,
         &Message::Log {
             pending_msgs: 0,
+            subscription: None,
             outer_length: 40,
             inner_length: 40,
             timestamp: Timestamp { ts: 0 },
@@ -254,6 +259,7 @@ fn test_lte_rrc_ota() {
         &parsed,
         &Message::Log {
             pending_msgs: 0,
+            subscription: None,
             outer_length: 38,
             inner_length: 38,
             timestamp: Timestamp { ts: 0 },
@@ -301,6 +307,7 @@ fn test_lte_rrc_ota() {
         &parsed,
         &Message::Log {
             pending_msgs: 0,
+            subscription: None,
             outer_length: 59,
             inner_length: 59,
             timestamp: Timestamp { ts: 0 },
@@ -353,6 +360,7 @@ fn test_lte_rrc_ota() {
         &parsed,
         &Message::Log {
             pending_msgs: 0,
+            subscription: None,
             outer_length: 33,
             inner_length: 33,
             timestamp: Timestamp { ts: 0 },
@@ -395,6 +403,7 @@ fn test_lte_rrc_ota() {
         &parsed,
         &Message::Log {
             pending_msgs: 0,
+            subscription: None,
             outer_length: 38,
             inner_length: 38,
             timestamp: Timestamp { ts: 0 },
@@ -440,6 +449,7 @@ fn test_lte_rrc_ota() {
         &parsed,
         &Message::Log {
             pending_msgs: 0,
+            subscription: None,
             outer_length: 33,
             inner_length: 33,
             timestamp: Timestamp { ts: 0 },
@@ -483,6 +493,7 @@ fn test_lte_rrc_ota() {
         &parsed,
         &Message::Log {
             pending_msgs: 0,
+            subscription: None,
             outer_length: 47,
             inner_length: 47,
             timestamp: Timestamp { ts: 0 },

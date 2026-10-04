@@ -322,6 +322,7 @@ impl<'de> Deserialize<'de> for AnalysisRow {
 pub struct Harness {
     analyzers: Vec<Box<dyn Analyzer + Send>>,
     packet_num: usize,
+    reassembly: super::reassembly::RrcReassembly,
 }
 
 impl Default for Harness {
@@ -335,6 +336,7 @@ impl Harness {
         Self {
             analyzers: Vec::new(),
             packet_num: 0,
+            reassembly: Default::default(),
         }
     }
 
@@ -427,9 +429,35 @@ impl Harness {
         let qmdl_message = match maybe_qmdl_message {
             Ok(msg) => msg,
             Err(err) => {
+                if matches!(&err, DiagParsingError::HdlcDecapsulationError(..)) {
+                    self.reassembly.clear();
+                }
                 row.skipped_message_reason = Some(format!("{err:?}"));
                 return row;
             }
+        };
+
+        let now = std::time::Instant::now();
+        let timestamp_ms = match &qmdl_message {
+            Message::Log { timestamp, .. } => Some(timestamp.to_datetime().timestamp_millis()),
+            _ => None,
+        };
+        let expired = self.reassembly.expire(timestamp_ms, now);
+        let qmdl_message = match self.reassembly.process(qmdl_message, now) {
+            Ok(message) => message,
+            Err(reason) => {
+                row.skipped_message_reason = Some(format!("RrcReassemblyError({reason})"));
+                return row;
+            }
+        };
+        let lost = expired + self.reassembly.take_interrupted();
+        if lost > 0 {
+            row.skipped_message_reason = Some(format!(
+                "RrcReassemblyError({lost} incomplete assemblies expired/interrupted)"
+            ));
+        }
+        let Some(qmdl_message) = qmdl_message else {
+            return row;
         };
         let gsmtap_message = match gsmtap_parser::parse(qmdl_message) {
             Ok(msg) => msg,
@@ -480,6 +508,18 @@ impl Harness {
                 maybe_event
             })
             .collect()
+    }
+
+    pub fn finish_qmdl_analysis(&mut self) -> Option<AnalysisRow> {
+        let incomplete = self.reassembly.clear();
+        if incomplete == 0 {
+            return None;
+        }
+        let mut row = AnalysisRow::new();
+        row.skipped_message_reason = Some(format!(
+            "RrcReassemblyError({incomplete} incomplete assemblies discarded at stream boundary)"
+        ));
+        Some(row)
     }
 
     pub fn get_metadata(&self) -> ReportMetadata {

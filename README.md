@@ -30,7 +30,73 @@ module, no ioctls — the existing HDLC parser handles the frames unchanged.
 | `daemon/src/battery/gl_e5800.rs` | Battery level + charge state from the cw221X fuel gauge (sysfs) |
 | `mudi7/` | OpenWrt packaging: config, init service, diag bridge, GPS feed (modem GNSS → `/api/gps`), `.ipk` builder |
 
-Everything downstream of the transport (parsing, analyzers, QMDL, web UI) is upstream code.
+The LTE decoding changes below also adapt parsing to the Mudi's modem output.
+Analyzer heuristics, QMDL format and web UI remain upstream code.
+
+### Draft LTE decoding corrections
+
+The RG650 emits HDLC-framed Qualcomm `0x98` multi-radio wrappers and LTE RRC
+header version 30. This branch verifies CRC before bounded wrapper unwrapping,
+preserves subscription metadata and parses the version-30 layout/channel mapping.
+Segmented version-30 messages are reassembled before live/offline analysis and
+PCAP conversion. Assemblies are isolated by subscription, bearer, channel and
+radio/header metadata, with limits of eight streams, 65,491 bytes and five seconds.
+Observed gaps, duplicate/invalid fragments, corruption and stream boundaries
+produce explicit errors rather than analyzing partial RRC messages.
+
+Two locked dependency corrections are also required: ASN.1 CHOICE extension
+open-type decoding (separate root/extension index namespaces) and a four-bit
+linked bearer field in NAS PDN Disconnect Request. The preparation tool downloads
+checksum-pinned dependency archives into an ignored directory and applies only
+these corrections. Full dependency sources are not republished in this branch.
+Maintainers should review dependency provenance/licensing and decide whether to
+use upstream releases or dedicated dependency forks before merging.
+
+Prepare the dependencies before any Cargo command:
+
+```sh
+python3 tools/prepare-lte-decoders.py
+```
+
+This requires Python 3.12 or newer. Offline archives can be supplied with
+`--derive-crate` and `--nas-archive`. The source pins are:
+
+- `asn1_codecs_derive` 0.7.1: SHA-256
+  `129a9f02b40e743766102dbbb93464b5868fb5e264a02a10d87fb45c472dd4b7`.
+- `EFForg/pycrate-rs` commit `9e72e40bee9c3c09205ad871cf681628b443de7c`:
+  codeload archive SHA-256
+  `a155d5f9fd9b7f277da34839a6d7e738e5a76155dbc71387a00c6c856bb382f9`.
+
+After building the web assets, run:
+
+```sh
+cargo test -p rayhunter -p telcom-parser -p rayhunter-daemon \
+  --features tokio/net --locked
+```
+
+Seven acceptance tests exercise all eight configured LTE analyzers through
+HDLC/CRC-wrapped DIAG packets. They cover 19 independently encoded synthetic
+positive/negative scenarios, fragmented Low/High events, interleaved subscriptions,
+corruption/boundaries, disabled analyzers and valid/truncated PDN Disconnect requests.
+The checked-in JSON needs no Python package for ordinary Rust tests.
+Regenerate it with `tools/generate-lte-acceptance.py <ASN-spec-directory> <output-json>`
+in an environment containing `asn1tools`.
+
+A private completed capture was replayed locally without overwriting its report:
+**21 RRC and three NAS decoding failures became zero**, preserving three Low
+Test Analyzer events. A rebuilt daemon on GL firmware 4.10.0 also produced a
+fresh real SIB1 event delivered to an Android companion notification. No private
+capture, subscriber/tower identifiers, credentials or device configuration is
+included here. The read-only `sentinel_validate_capture` example prints counts,
+not identifiers.
+
+These results do **not** guarantee zero errors for every modem message, every
+attack heuristic, false-positive rates or comprehensive 5G detection. Real
+fragmented modem captures have not yet validated the segment semantics.
+Terminal ID 7 carries no total fragment count; a lost trailing intermediate
+fragment can resemble a legitimate shorter sequence. Unknown CHOICE alternatives
+still fail; extension encoding is not added. This remains a draft pending
+maintainer review, representative field validation and dependency integration.
 
 ## Install (LuCI)
 
@@ -65,11 +131,14 @@ web frontend). No C cross-compiler needed (rust-lld linker, rustcrypto TLS).
 # 1. Frontend assets (embedded via include_bytes!)
 cd daemon/web && npm install && npm run build && cd ../..
 
-# 2. Cross-compile the daemon
+# 2. Prepare the draft decoder dependencies
+python3 tools/prepare-lte-decoders.py
+
+# 3. Cross-compile the daemon
 cargo build -p rayhunter-daemon --bin rayhunter-daemon \
     --target aarch64-unknown-linux-musl --profile firmware-devel
 
-# 3. Package the .ipk (output lands in mudi7/dist/)
+# 4. Package the .ipk (output lands in mudi7/dist/)
 python3 mudi7/build-ipk.py \
     --binary target/aarch64-unknown-linux-musl/firmware-devel/rayhunter-daemon
 ```

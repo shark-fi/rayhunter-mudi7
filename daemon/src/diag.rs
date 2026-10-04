@@ -556,6 +556,11 @@ pub fn run_diag_read_thread(
                             Err(err) => {
                                 error!("error reading diag device: {err}");
                                 if socket_transport {
+                                    if let DiagState::Recording { analysis_writer, .. } = &mut diag_task.state {
+                                        if let Err(e) = analysis_writer.reset_reassembly().await {
+                                            error!("Could not report discarded RRC fragments: {e}");
+                                        }
+                                    }
                                     warn!("DIAG bridge disconnected; reconnecting and resuming recording...");
                                     break;
                                 }

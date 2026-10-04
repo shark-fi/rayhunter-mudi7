@@ -7,6 +7,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum GsmtapParserError {
+    #[error("Segmented LTE RRC must be reassembled before GSMTAP conversion")]
+    RrcReassemblyRequired,
     #[error("Invalid LteRrcOtaMessage ext header version {0}")]
     InvalidLteRrcOtaExtHeaderVersion(u8),
     #[error("Invalid LteRrcOtaMessage header/PDU number combination: {0}/{1}")]
@@ -14,6 +16,21 @@ pub enum GsmtapParserError {
 }
 
 pub fn parse(msg: Message) -> Result<Option<(Timestamp, GsmtapMessage)>, GsmtapParserError> {
+    if matches!(
+        &msg,
+        Message::Log {
+            body: LogBody::LteRrcOtaMessage {
+                packet: crate::diag::diaglog::rrc::LteRrcOtaPacket::V30 {
+                    segment_id: 1..=255,
+                    ..
+                },
+                ..
+            },
+            ..
+        }
+    ) {
+        return Err(GsmtapParserError::RrcReassemblyRequired);
+    }
     if let Message::Log {
         timestamp, body, ..
     } = msg
@@ -83,7 +100,7 @@ fn log_to_gsmtap(value: LogBody) -> Result<Option<GsmtapMessage>, GsmtapParserEr
                         ));
                     }
                 },
-                0x13 | 0x1a | 0x1b => match packet.get_pdu_num() {
+                0x13 | 0x1a | 0x1b | 0x1d | 0x1e => match packet.get_pdu_num() {
                     1 => GsmtapType::LteRrc(LteRrcSubtype::BcchBch),
                     3 => GsmtapType::LteRrc(LteRrcSubtype::BcchDlSch),
                     6 => GsmtapType::LteRrc(LteRrcSubtype::MCCH),
@@ -177,5 +194,60 @@ mod tests {
         };
         // This would panic before the fix with "bit size of input is larger than bit requested size"
         assert!(msg.to_bytes().is_ok());
+    }
+}
+
+#[cfg(test)]
+mod sentinel_rrc_v30_tests {
+    use super::*;
+    use crate::diag::{CRC_CCITT, Message};
+    use crate::hdlc::hdlc_encapsulate;
+
+    fn frame(pdu: u8, version: u8) -> Vec<u8> {
+        let mut log = vec![0x10, 0, 37, 0, 37, 0, 0xc0, 0xb0];
+        log.extend_from_slice(&[0; 8]);
+        log.extend_from_slice(&[
+            version, 17, 32, 17, 128, 1, 0, 0, 1, 0, 0, 0, 0, 0, pdu, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+            0x40,
+        ]);
+        let mut wrapped = vec![0x98, 1, 0, 0, 1, 0, 0, 0];
+        wrapped.extend_from_slice(&log);
+        hdlc_encapsulate(&wrapped, &CRC_CCITT)
+    }
+
+    #[test]
+    fn v30_payload_starts_after_extra_three_header_bytes() {
+        for (pdu, subtype) in [
+            (1, LteRrcSubtype::BcchBch),
+            (3, LteRrcSubtype::BcchDlSch),
+            (8, LteRrcSubtype::DlCcch),
+            (9, LteRrcSubtype::DlDcch),
+            (10, LteRrcSubtype::UlCcch),
+            (11, LteRrcSubtype::UlDcch),
+        ] {
+            let message = Message::from_hdlc(&frame(pdu, 30)).unwrap();
+            let (_, gsmtap) = parse(message).unwrap().unwrap();
+            assert_eq!(gsmtap.payload, vec![0x40]);
+            assert_eq!(gsmtap.header.subtype, subtype as u8);
+        }
+    }
+
+    #[test]
+    fn unknown_future_version_is_rejected() {
+        assert!(Message::from_hdlc(&frame(3, 31)).is_err());
+    }
+
+    #[test]
+    fn segmented_rrc_is_rejected_instead_of_analyzing_partial_payload() {
+        let mut payload = crate::hdlc::hdlc_decapsulate(&frame(3, 30), &CRC_CCITT).unwrap();
+        payload[8 + 16 + 23] = 1;
+        let message = Message::from_hdlc(&hdlc_encapsulate(&payload, &CRC_CCITT)).unwrap();
+        let mut reassembly = crate::analysis::reassembly::RrcReassembly::default();
+        assert!(
+            reassembly
+                .process(message, std::time::Instant::now())
+                .unwrap()
+                .is_none()
+        );
     }
 }
